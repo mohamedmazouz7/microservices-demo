@@ -1,0 +1,54 @@
+# Frontend Service Manifest
+# This file tells Kubernetes HOW to expose the frontend to network traffic
+# Think of it as: "Create a stable network endpoint for frontend Pods"
+
+apiVersion: v1     # Services use v1 API
+kind: Service      # We're creating a Service
+
+metadata:
+  name: frontend   # Service name (other apps use this DNS name to reach frontend)
+  labels:
+    app: frontend
+
+spec:
+  # Type determines HOW the service is exposed:
+  # - ClusterIP: Only accessible within the cluster (default)
+  # - NodePort: Accessible from outside via node's IP:port
+  # - LoadBalancer: Cloud provider creates external load balancer
+  # - ExternalName: Maps to external DNS
+  type: LoadBalancer  # Use LoadBalancer to access from outside the cluster
+
+  # Port mappings
+  ports:
+  - name: http           # Name of this port
+    protocol: TCP        # TCP or UDP
+    port: 80             # "Listen on this port externally"
+    targetPort: 8080     # "Forward to this port on the Pods"
+    # If targetPort is string (like "http"), it uses the container port named "http"
+
+  # Selector - "Forward traffic to Pods with these labels"
+  # Must match the labels in the Deployment's Pod template
+  selector:
+    app: frontend        # Send traffic to Pods labeled "app: frontend"
+
+  # Session affinity - optional, for sticky sessions
+  # sessionAffinity: ClientIP  # Same client always hits same Pod
+  # sessionAffinityConfig:
+  #   clientIP:
+  #     timeoutSeconds: 3600
+
+# ---
+# Explanation of how this works:
+#
+# 1. You create a Pod with label app: frontend
+# 2. You create a Service with selector app: frontend
+# 3. Service discovers Pods with matching labels → gets their IP addresses
+# 4. Service creates an endpoint list (which Pods to send traffic to)
+# 5. Kubernetes DNS creates: frontend.default.svc.cluster.local → Service IP
+# 6. When app sends request to "frontend:80", it reaches the Service
+# 7. Service load-balances across all matching Pods' port 8080
+#
+# Think of Service as a smart load balancer + DNS name that:
+# - Auto-discovers Pods (via labels)
+# - Auto-updates when Pods come/go
+# - Load-balances traffic between them
