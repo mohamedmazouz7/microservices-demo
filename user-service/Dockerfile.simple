@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Minimal dependencies: FastAPI, Uvicorn, psycopg2-binary (pre-compiled)
+RUN pip install --no-cache-dir fastapi uvicorn[standard] psycopg2-binary
+
+# Copy app
+COPY app_simple.py app.py
+
+EXPOSE 8080
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "app.py"]

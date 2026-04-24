@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: auth-service-secret
+  namespace: shop-zone
+type: Opaque
+stringData:
+  JWT_SECRET_KEY: "super-secret-shared-key-12345"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: shop-zone
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+        - name: auth-service
+          image: nirou42/auth-service:0.1.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: LOG_LEVEL
+              value: "INFO"
+            - name: USER_SERVICE_URL
+              value: "http://user-service.shop-zone.svc.cluster.local:8080"
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: auth-service-secret
+                  key: JWT_SECRET_KEY
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: shop-zone
+spec:
+  type: ClusterIP
+  selector:
+    app: auth-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+
