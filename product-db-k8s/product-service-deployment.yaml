@@ -1,41 +1,51 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-service
+  namespace: shop-zone
+spec:
+  type: ClusterIP
+  selector:
+    app: product-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+
+---
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: user-service
+  name: product-service
   namespace: shop-zone
-  labels:
-    app: user-service
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: user-service
+      app: product-service
   template:
     metadata:
       labels:
-        app: user-service
+        app: product-service
     spec:
       containers:
-        - name: user-service
-          image: nirou42/user-service:0.2.0
-          imagePullPolicy: Always
+        - name: product-service
+          image: nirou42/product-service:0.1.0
           ports:
             - containerPort: 8080
           env:
-            - name: LOG_LEVEL
-              value: "INFO"
-            - name: AUTH_SERVICE_URL
-              value: "http://auth-service.shop-zone.svc.cluster.local:8080"
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: user-service-db-secret
+                  name: product-service-secret
                   key: DATABASE_URL
+            - name: AUTH_SERVICE_URL
+              value: "http://auth-service.shop-zone.svc.cluster.local:8080"
           livenessProbe:
             httpGet:
               path: /healthz
               port: 8080
-            initialDelaySeconds: 15
+            initialDelaySeconds: 5
             periodSeconds: 10
           readinessProbe:
             httpGet:

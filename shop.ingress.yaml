@@ -10,6 +10,13 @@ spec:
     - host: shop.local
       http:
         paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-service
+                port:
+                  number: 80
           - path: /users
             pathType: Prefix
             backend:
@@ -22,5 +29,12 @@ spec:
             backend:
               service:
                 name: auth-service
+                port:
+                  number: 8080
+          - path: /products
+            pathType: Prefix
+            backend:
+              service:
+                name: product-service
                 port:
                   number: 8080

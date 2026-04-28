@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-postgres-db
+  namespace: shop-zone
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: product-db
+  template:
+    metadata:
+      labels:
+        app: product-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: product-service-secret
+                  key: POSTGRES_PASSWORD
+          ports:
+            - containerPort: 5432
+              name: product-db
+          volumeMounts:
+            - name: product-db-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: product-db-data
+          persistentVolumeClaim:
+            claimName: product-database-pvc
+
+

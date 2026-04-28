@@ -1,7 +1,10 @@
-"""Minimal FastAPI User Service with Postgres support"""
+"""Minimal FastAPI User Service with Postgres support and JWT authentication"""
 import os
 import logging
-from fastapi import FastAPI
+import json
+import urllib.request
+import urllib.error
+from fastapi import FastAPI, HTTPException, Depends, Header
 from pydantic import BaseModel
 
 # Logging
@@ -9,6 +12,9 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="User Service", version="0.2.0")
+
+# Auth Service URL for token verification
+AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:8080")
 
 # Database connection (lazy-loaded)
 db_connection = None
@@ -46,6 +52,57 @@ def get_db_connection():
             return None
     return db_connection
 
+def verify_token(authorization: str = Header(None)):
+    """
+    Verify JWT token by calling Auth Service.
+    Dependency for protected endpoints.
+    """
+    if not authorization:
+        logger.warning("Missing Authorization header")
+        raise HTTPException(status_code=401, detail="Missing authorization header")
+    
+    # Extract token from "Bearer <token>"
+    parts = authorization.split(" ")
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        logger.warning("Invalid Authorization header format")
+        raise HTTPException(status_code=401, detail="Invalid authorization header format")
+    
+    token = parts[1]
+    
+    try:
+        # Call Auth Service to verify token
+        verify_url = f"{AUTH_SERVICE_URL}/auth/verify"
+        payload = json.dumps({"token": token}).encode('utf-8')
+        
+        request = urllib.request.Request(
+            verify_url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        
+        with urllib.request.urlopen(request, timeout=5) as response:
+            result = json.loads(response.read().decode())
+            
+            if not result.get("valid"):
+                logger.warning(f"Token verification failed: invalid token")
+                raise HTTPException(status_code=401, detail="Invalid or expired token")
+            
+            # Return the verified token info (username, user_id)
+            logger.info(f"✓ Token verified for user: {result.get('username')}")
+            return result
+            
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode()
+        logger.error(f"Auth Service returned {e.code}: {error_body}")
+        raise HTTPException(status_code=401, detail="Token verification failed")
+    except urllib.error.URLError as e:
+        logger.error(f"Failed to reach Auth Service: {str(e)}")
+        raise HTTPException(status_code=503, detail="Auth Service unavailable")
+    except Exception as e:
+        logger.error(f"Token verification error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Token verification error: {str(e)}")
+
 @app.get("/healthz")
 async def liveness():
     """Liveness probe - always returns 200 if service is running"""
@@ -79,21 +136,24 @@ async def metrics():
     return {"service": "user-service", "version": "0.2.0", "users_count": len(users_db)}
 
 @app.get("/users/{user_id}", response_model=User)
-async def get_user(user_id: int):
-    """Get a user by ID"""
+async def get_user(user_id: int, token_info: dict = Depends(verify_token)):
+    """Get a user by ID (requires valid JWT token)"""
     if user_id in users_db:
+        logger.info(f"User {token_info.get('username')} retrieved user {user_id}")
         return users_db[user_id]
-    return {"detail": "User not found"}, 404
+    raise HTTPException(status_code=404, detail="User not found")
 
 @app.get("/users", response_model=list[User])
-async def list_users():
-    """List all users"""
+async def list_users(token_info: dict = Depends(verify_token)):
+    """List all users (requires valid JWT token)"""
+    logger.info(f"User {token_info.get('username')} listed all users")
     return list(users_db.values())
 
 @app.post("/users", response_model=User, status_code=201)
-async def create_user(user: User):
-    """Create a new user"""
+async def create_user(user: User, token_info: dict = Depends(verify_token)):
+    """Create a new user (requires valid JWT token)"""
     users_db[user.id] = user
+    logger.info(f"User {token_info.get('username')} created user {user.username}")
     return user
 
 if __name__ == "__main__":
